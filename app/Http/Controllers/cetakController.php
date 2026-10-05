@@ -126,170 +126,396 @@ class cetakController extends Controller
     }
 
 
-    public function cover()
-    {
-
+public function cover()
+{
+    try {
+        /*
+        |--------------------------------------------------------------------------
+        | Ambil data sekolah
+        |--------------------------------------------------------------------------
+        */
         $sekolah = ModelSekolah::first();
 
-        if (empty($sekolah)) {
-            return redirect()->route('cetak')->with('error', 'Data Profile Sekolah belum diisi');
+        if (!$sekolah) {
+            return redirect()
+                ->route('cetak')
+                ->with('error', 'Data Profile Sekolah belum diisi.');
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Tahun cetak
+        |--------------------------------------------------------------------------
+        */
+        $tahunCetak = $_COOKIE['tahun_cetak'] ?? '-';
 
-        $tahunCetak = $_COOKIE['tahun_cetak'];
-        $documentFileName = "cover.pdf";
+        /*
+        |--------------------------------------------------------------------------
+        | Bersihkan nilai tahun untuk nama file
+        |--------------------------------------------------------------------------
+        */
+        $fileTahun = preg_replace('/[^A-Za-z0-9_\-]/', '_', $tahunCetak);
 
+        if (empty($fileTahun)) {
+            $fileTahun = 'tahun';
+        }
 
-
-
-        // Create the mPDF document
+        /*
+        |--------------------------------------------------------------------------
+        | Inisialisasi mPDF
+        |--------------------------------------------------------------------------
+        */
         $document = new PDF([
             'mode' => 'utf-8',
             'format' => 'A4',
-            'margin_header' => '3',
-            'margin_top' => '10',
-            'margin_bottom' => '10',
-            'margin_footer' => '2',
+
+            'margin_header' => 3,
+            'margin_top' => 10,
+            'margin_bottom' => 10,
+            'margin_footer' => 2,
+
             'default_font_size' => 16,
-            'default_font' => 'sans-serif'
+            'default_font' => 'sans-serif',
+
+            // Penting untuk file lokal seperti gambar
+            'tempDir' => storage_path('app/mpdf-temp'),
         ]);
 
-        // Set some header informations for output
-        $header = [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="' . $documentFileName . '"'
-        ];
+        /*
+        |--------------------------------------------------------------------------
+        | Pastikan folder temporary mPDF tersedia
+        |--------------------------------------------------------------------------
+        */
+        $tempDir = storage_path('app/mpdf-temp');
 
-        // Write some simple Content
-        $stylesheet = file_get_contents('cetak.css');
-        $document->SetTitle("HALAMAN COVER");
-        $document->WriteHTML($stylesheet, \Mpdf\HTMLParserMode::HEADER_CSS);
-        $document->WriteHTML("
-            <table width='100%'>
+        if (!is_dir($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | CSS
+        |--------------------------------------------------------------------------
+        */
+        $cssPath = public_path('cetak.css');
+
+        if (file_exists($cssPath) && is_readable($cssPath)) {
+
+            $stylesheet = file_get_contents($cssPath);
+
+            if ($stylesheet !== false && !empty($stylesheet)) {
+                $document->WriteHTML(
+                    $stylesheet,
+                    \Mpdf\HTMLParserMode::HEADER_CSS
+                );
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Title PDF
+        |--------------------------------------------------------------------------
+        */
+        $document->SetTitle('HALAMAN COVER');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Logo
+        |--------------------------------------------------------------------------
+        */
+        $logoPath = public_path('storage/images/logo.jpg');
+
+        $logoHtml = '';
+
+        if (file_exists($logoPath) && is_readable($logoPath)) {
+
+            /*
+             * Gunakan path lokal yang sudah dinormalisasi.
+             * Ini lebih aman untuk mPDF dibanding URL relatif.
+             */
+            $logoPath = str_replace('\\', '/', $logoPath);
+
+            /*
+             * Escape path untuk HTML
+             */
+            $logoPath = htmlspecialchars(
+                $logoPath,
+                ENT_QUOTES,
+                'UTF-8'
+            );
+
+            $logoHtml = "
+                <img
+                    src=\"{$logoPath}\"
+                    width=\"400\"
+                    alt=\"Logo Sekolah\"
+                >
+            ";
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | HTML COVER
+        |--------------------------------------------------------------------------
+        */
+        $tahunCetakHtml = htmlspecialchars(
+            $tahunCetak,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $html = "
+            <table width=\"100%\">
                 <tbody>
+
                     <tr>
-                       <td colspan='2' class=' text-left'>
-                           <h2>MERDEKA</h2>
-                       </td> 
-                    </tr>
-                    <tr>
-                       <td colspan='2' class=' text-left'>
-                           <h2>BELAJAR</h2>
-                       </td> 
-                    </tr>
-                    
-                    <tr>
-                       <td colspan='2' class=' text-center'>
-                           <img src='storage/images/logo.jpg' width='400px'>
-                       </td> 
-                    </tr>
-                    <tr>
-                        <td colspan='2' class=' text-center'>
-                            <h1> BUKU INDUK REGISTER </h1>
+                        <td colspan=\"2\" class=\"text-left\">
+                            <h2>MERDEKA</h2>
                         </td>
                     </tr>
+
                     <tr>
-                        <td colspan='2' class=' text-center'>
-                            <h1> PESERTA DIDIK </h1>
-                         </td>
+                        <td colspan=\"2\" class=\"text-left\">
+                            <h2>BELAJAR</h2>
+                        </td>
                     </tr>
+
                     <tr>
-                        <td colspan='2' class=' text-center'>
-                            <h1> KURIKULUM MERDEKA </h1>
-                         </td>
+                        <td colspan=\"2\" class=\"text-center\">
+                            {$logoHtml}
+                        </td>
                     </tr>
+
                     <tr>
-                        <td colspan='2' class=' text-center'>
-                            <h1> SEKOLAH DASAR (SD) </h1>
-                         </td>
+                        <td colspan=\"2\" class=\"text-center\">
+                            <h1>BUKU INDUK REGISTER</h1>
+                        </td>
                     </tr>
+
                     <tr>
-                        <td colspan='2' class=' text-center'>
-                            <h1>  {$tahunCetak} </h1>
-                         </td>
+                        <td colspan=\"2\" class=\"text-center\">
+                            <h1>PESERTA DIDIK</h1>
+                        </td>
                     </tr>
+
+                    <tr>
+                        <td colspan=\"2\" class=\"text-center\">
+                            <h1>KURIKULUM MERDEKA</h1>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td colspan=\"2\" class=\"text-center\">
+                            <h1>SEKOLAH DASAR (SD)</h1>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td colspan=\"2\" class=\"text-center\">
+                            <h1>{$tahunCetakHtml}</h1>
+                        </td>
+                    </tr>
+
                 </tbody>
             </table>
-        ");
+        ";
 
-        $document->WriteHTML("
-            <div class='rcorners2'>
-                <table width='100%' class='table-border-out'>
+        /*
+        |--------------------------------------------------------------------------
+        | Tulis HTML cover
+        |--------------------------------------------------------------------------
+        */
+        $document->WriteHTML($html);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Escape data sekolah
+        |--------------------------------------------------------------------------
+        */
+        $namaSekolah = htmlspecialchars(
+            $sekolah->nama ?? '-',
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $alamat = htmlspecialchars(
+            $sekolah->alamat ?? '-',
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $desa = htmlspecialchars(
+            $sekolah->desa ?? '-',
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $kecamatan = htmlspecialchars(
+            $sekolah->kecamatan ?? '-',
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $kota = htmlspecialchars(
+            $sekolah->kota ?? '-',
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $provinsi = htmlspecialchars(
+            $sekolah->provinsi ?? '-',
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Informasi sekolah
+        |--------------------------------------------------------------------------
+        */
+        $htmlSekolah = "
+            <div class=\"rcorners2\">
+
+                <table width=\"100%\" class=\"table-border-out\">
+
                     <tbody>
+
                         <tr>
-                            <td class='text-left'>
+                            <td class=\"text-left\">
                                 <h4>NAMA SEKOLAH</h4>
                             </td>
-                            <td class='text-left'>
+
+                            <td class=\"text-left\">
                                 <h4>:</h4>
                             </td>
-                            <td class='text-left'>
-                                <h4>$sekolah->nama</h4>
+
+                            <td class=\"text-left\">
+                                <h4>{$namaSekolah}</h4>
                             </td>
                         </tr>
+
                         <tr>
-                            <td class='text-left'>
+                            <td class=\"text-left\">
                                 <h4>ALAMAT SEKOLAH</h4>
                             </td>
-                            <td class='text-left'>
+
+                            <td class=\"text-left\">
                                 <h4>:</h4>
                             </td>
-                            <td class='text-left'>
-                                <h4>$sekolah->alamat</h4>
+
+                            <td class=\"text-left\">
+                                <h4>{$alamat}</h4>
                             </td>
                         </tr>
+
                         <tr>
-                            <td class='text-left'>
+                            <td class=\"text-left\">
                                 <h4>DESA / KELURAHAN</h4>
                             </td>
-                            <td class='text-left'>
+
+                            <td class=\"text-left\">
                                 <h4>:</h4>
                             </td>
-                            <td class='text-left'>
-                                <h4>$sekolah->desa</h4>
+
+                            <td class=\"text-left\">
+                                <h4>{$desa}</h4>
                             </td>
                         </tr>
+
                         <tr>
-                            <td class='text-left'>
+                            <td class=\"text-left\">
                                 <h4>KECAMATAN</h4>
                             </td>
-                            <td class='text-left'>
+
+                            <td class=\"text-left\">
                                 <h4>:</h4>
                             </td>
-                            <td class='text-left'>
-                                <h4>$sekolah->kecamatan</h4>
+
+                            <td class=\"text-left\">
+                                <h4>{$kecamatan}</h4>
                             </td>
                         </tr>
+
                         <tr>
-                            <td class='text-left'>
+                            <td class=\"text-left\">
                                 <h4>KABUPATEN / KOTA</h4>
                             </td>
-                            <td class='text-left'>
+
+                            <td class=\"text-left\">
                                 <h4>:</h4>
                             </td>
-                            <td class='text-left'>
-                                <h4>$sekolah->kota</h4>
+
+                            <td class=\"text-left\">
+                                <h4>{$kota}</h4>
                             </td>
                         </tr>
+
                         <tr>
-                            <td class='text-left'>
+                            <td class=\"text-left\">
                                 <h4>PROVINSI</h4>
                             </td>
-                            <td class='text-left'>
+
+                            <td class=\"text-left\">
                                 <h4>:</h4>
                             </td>
-                            <td class='text-left'>
-                                <h4>$sekolah->provinsi</h4>
+
+                            <td class=\"text-left\">
+                                <h4>{$provinsi}</h4>
                             </td>
                         </tr>
+
                     </tbody>
+
                 </table>
+
             </div>
-        ");
+        ";
+
+        /*
+        |--------------------------------------------------------------------------
+        | Tulis informasi sekolah
+        |--------------------------------------------------------------------------
+        */
+        $document->WriteHTML($htmlSekolah);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Nama file PDF
+        |--------------------------------------------------------------------------
+        */
+        $fileName = "Cover-{$fileTahun}.pdf";
+
+        /*
+        |--------------------------------------------------------------------------
+        | Output PDF
+        |--------------------------------------------------------------------------
+        */
+        return $document->Output(
+            $fileName,
+            'I'
+        );
+
+    }  catch (\Throwable $e) {
+
+    \Log::error('Gagal membuat PDF Cover', [
+        'message' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+        'trace' => $e->getTraceAsString(),
+    ]);
+
+    return response()->json([
+        'success' => false,
+        'message' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+    ], 500);
+}
+
+}
 
 
-        $document->Output("Cover-{$tahunCetak}.pdf", 'I');
-    }
+
 
 
     public function biodata($id)
